@@ -54,64 +54,141 @@ class Interpreter(InterpreterBase):
 
         if self.trace_output:
             print(f'Running statement {statement_elem.elem_type} {statement_elem.dict["name"]}.')
+        
+        # print(statement_elem)
+        # Statement (vardef)
         if statement_elem.elem_type == "vardef":
             if statement_elem.get("name") in self.vars_to_vals:
                 super().error(ErrorType.NAME_ERROR, f"Variable {statement_elem.get('name')} defined more than once",)
             self.vars_to_vals[statement_elem.dict["name"]] = None
 
-        # Statement logic (assignment)
-        if statement_elem.elem_type == "=":
+        # Statement (assignment)
+        elif statement_elem.elem_type == "=":
             if "expression" not in statement_elem.dict:
                 super().error(ErrorType.NAME_ERROR,"ERROR: Statement element has no expression.")
-                exit()
+            if statement_elem.get("name") not in self.vars_to_vals:
+                super().error(ErrorType.NAME_ERROR, f"Variable {statement_elem.get('name')} not defined",)
+
             if self.trace_output:
                 print("Statement is assignment.")
-            value = self.get_expr(statement_elem.get("expression"))
+            # print(statement_elem.get("expression"))
+            value = self.run_expression(statement_elem.get("expression"))
             self.vars_to_vals[statement_elem.get("name")] = value
 
-        # Statment logic (fcall)
-        if statement_elem.elem_type == "fcall":
-            # Verify fcall structure
+        # Statment (fcall)
+        elif statement_elem.elem_type == "fcall":
             if "args" not in statement_elem.dict:
                 super().error(ErrorType.NAME_ERROR,"ERROR: Statement element has no args.")
-                exit()
-            # Trace output
             if self.trace_output:
                 print("Statement is fcall.")
-            # Fcall logic
             self.run_fcall(statement_elem)
+        
+        else:
+            super().error(ErrorType.NAME_ERROR, "It's Not a valid statement",)
+        # print(self.vars_to_vals)
 
+    def run_expression(self, expr_elem):
+
+        Operators = { "-" : lambda x, y: x - y, "+" : lambda x, y: x + y,}
+
+        VAR = ["var"]
+        VALUE = ["string","int"]
+        EXPR = ["fcall", "+", "-"]
+
+        result = None
+        if expr_elem.elem_type in VAR:
+            if "name" not in expr_elem.dict:
+                super().error(ErrorType.NAME_ERROR, "Variable expression has no name.")
+            if self.trace_output:
+                print(f"Evaluating variable with name {expr_elem.get('name')}.")
+            var_name = expr_elem.get("name")
+
+            if var_name not in self.vars_to_vals:
+                super().error(ErrorType.NAME_ERROR, f"Variable {var_name} has not been defined")
+            
+            result = self.vars_to_vals[var_name]
+
+        elif expr_elem.elem_type in VALUE:
+            if "val" not in expr_elem.dict:
+                super().error(ErrorType.NAME_ERROR, "ERROR: Value expression has no val.")
+            if self.trace_output:
+                print(f'Evaluting value w val {expr_elem.dict["val"]}.')
+            result = expr_elem.get("val")  
+
+        elif expr_elem.elem_type in EXPR:
+            if expr_elem.elem_type in Operators:
+                if "op1" not in expr_elem.dict or "op2" not in expr_elem.dict:
+                    super.error(ErrorType.NAME_ERROR,"Expression no valid op1 or op2.")
+
+                op1 = self.run_expression(expr_elem.dict["op1"])
+                op2 = self.run_expression(expr_elem.dict["op2"])
+
+                if self.trace_output:
+                    print(f"Evaluting operator expression {expr_elem.elem_type} {op1} {op2}.")
+
+                if not isinstance(op1, int) or not isinstance(op2, int):
+                    super().error(ErrorType.TYPE_ERROR,"Incompatible types for arithmetic operation",
+                    )
+
+                result =  Operators[expr_elem.elem_type](op1, op2)
+
+            elif expr_elem.elem_type == "fcall":
+                result = self.run_fcall(expr_elem)
+
+            else:
+                super().error(ErrorType.NAME_ERROR,"ERROR: Expression is not operator or fcall.")
+
+        else:
+            super().error(ErrorType.NAME_ERROR,"expression type is not the acceptable one.")
+
+        return result
+
+    def run_fcall(self, fcall_elem):
+        func_list = ["print", "inputi"]
+
+        if fcall_elem.elem_type != "fcall" or "name" not in fcall_elem.dict or "args" not in fcall_elem.dict:
+            super().error(ErrorType.NAME_ERROR, " invalid fcall element.")
+        if fcall_elem.get("name") not in func_list:
+                super().error(ErrorType.NAME_ERROR, f"Function {fcall_elem.get('name')} not defined",)
+
+        if self.trace_output:
+            print(f'Perform function call {fcall_elem.dict["name"]}')
+
+        if fcall_elem.get("name") == "print":
+            string_print = ""
+            args = fcall_elem.get("args")
+            for item in args:
+                string_print += str(self.run_expression(item))
+            super().output(string_print)
+
+        elif fcall_elem.dict["name"] == "inputi":
+            args = fcall_elem.get("args")
+            if len(args) > 1:
+                super().error(ErrorType.NAME_ERROR,f"inputi() function do not take more than parameter",)
+            else:
+                if len(args)==1:
+                    prompt = str(self.run_expression(args[0]))
+                    super().output(prompt)
+                input = int(super().get_input())
+                return input
+        else:
+            super().error(ErrorType.NAME_ERROR,f'No matching function.',)
+
+        return None
 
 def main():
     test_program = """func main() {
         var x;
         var y;
         var z;
-        var a;
-        var b;
-        var a_str;
-        var magic_num;
-        var magic_num_no_prompt;
 
-        x = 5 + 6;
-        y = 10;
-        z = (x + (1 - 3)) - y;
-        a_str = "this is a string";
-
-        print(10);
-        print("hello world!");
-        print("The sum is: ", x);
-        print("the answer is: ", x + (y - 5), "!");
-        print("hi", inputi("enter your number: "), "there");
-
-        magic_num = inputi("enter a magic number: "); 
-        print("magic_num: ", magic_num);
-        magic_num_no_prompt = inputi();
-        print("magic_num_no_prompt + 19: ", magic_num_no_prompt + 19);
-
-        a = 4 + inputi("enter a number: ");
-        b = 3 - (3 + (2 + inputi()));    
-        print(a + b);
+        x = 5 + 2;
+        var word;
+        word = "hello";
+        print(word);
+        
+        y = 12;
+        z = y - (x + (5 - 2));
     }"""
 
     new_interpreter = Interpreter(console_output = True, inp = None, trace_output = False)
