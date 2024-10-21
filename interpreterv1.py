@@ -32,51 +32,52 @@ class Interpreter(InterpreterBase):
                     main_found = True
                     break
             if not main_found:
-                super().error(ErrorType.NAME_ERROR,
-                          "No main() function was found",
-                )
+                super().error(ErrorType.NAME_ERROR,"No main() function was found",)
             for i in range(num):
                 if ast.get("functions")[i].get("name") == "main":
                     self.run_function(ast.get("functions")[i])
 
     def run_function(self, func_element):
         if func_element.elem_type != "func" or "name" not in func_element.dict or  "statements" not in func_element.dict:
-            super().error(ErrorType.NAME_ERROR,"ERROR: Running run_function_ on invalid function element.")
+            super().error(ErrorType.NAME_ERROR,"Running run_function_ on invalid function element.")
 
         if self.trace_output:
-            print(f'Running function: {func_element.dict["name"]}.')
-        for statement in func_element.dict["statements"]:
+            print(f"Running function: {func_element.get('name')}.")
+        for statement in func_element.get("statements"):
             self.run_statement(statement)
     
     def run_statement(self, statement_elem):
-        if statement_elem.elem_type not in ["vardef","=", "fcall"] or "name" not in statement_elem.dict:
-            super().error(ErrorType.NAME_ERROR,"ERROR: Running run_statement on invalid statement element.")
+        statement_type = statement_elem.elem_type
+        statement_name = statement_elem.get("name")
 
+        if statement_type not in ["vardef","=", "fcall"] or "name" not in statement_elem.dict:
+            super().error(ErrorType.NAME_ERROR,"Running run_statement on invalid statement element.")
+        
         if self.trace_output:
-            print(f'Running statement {statement_elem.elem_type} {statement_elem.dict["name"]}.')
+            print(f"Running statement {statement_elem.elem_type} {statement_elem.get('name')}.")
         
         # print(statement_elem)
         # Statement (vardef)
-        if statement_elem.elem_type == "vardef":
-            if statement_elem.get("name") in self.vars_to_vals:
-                super().error(ErrorType.NAME_ERROR, f"Variable {statement_elem.get('name')} defined more than once",)
-            self.vars_to_vals[statement_elem.dict["name"]] = None
+        if statement_type == "vardef":
+            if statement_name in self.vars_to_vals:
+                super().error(ErrorType.NAME_ERROR, f"Variable {statement_name} defined more than once",)
+            self.vars_to_vals[statement_name] = None
 
         # Statement (assignment)
-        elif statement_elem.elem_type == "=":
+        elif statement_type == "=":
             if "expression" not in statement_elem.dict:
                 super().error(ErrorType.NAME_ERROR,"ERROR: Statement element has no expression.")
-            if statement_elem.get("name") not in self.vars_to_vals:
-                super().error(ErrorType.NAME_ERROR, f"Variable {statement_elem.get('name')} not defined",)
+            if statement_name not in self.vars_to_vals:
+                super().error(ErrorType.NAME_ERROR, f"Variable {statement_name} not defined",)
 
             if self.trace_output:
                 print("Statement is assignment.")
             # print(statement_elem.get("expression"))
             value = self.run_expression(statement_elem.get("expression"))
-            self.vars_to_vals[statement_elem.get("name")] = value
+            self.vars_to_vals[statement_name] = value
 
         # Statment (fcall)
-        elif statement_elem.elem_type == "fcall":
+        elif statement_type == "fcall":
             if "args" not in statement_elem.dict:
                 super().error(ErrorType.NAME_ERROR,"ERROR: Statement element has no args.")
             if self.trace_output:
@@ -94,45 +95,47 @@ class Interpreter(InterpreterBase):
         VAR = ["var"]
         VALUE = ["string","int"]
         EXPR = ["fcall", "+", "-"]
+        expr_type = expr_elem.elem_type
+        expr_name = expr_elem.get("name")
 
         result = None
-        if expr_elem.elem_type in VAR:
+        if expr_type in VAR:
             if "name" not in expr_elem.dict:
                 super().error(ErrorType.NAME_ERROR, "Variable expression has no name.")
             if self.trace_output:
-                print(f"Evaluating variable with name {expr_elem.get('name')}.")
-            var_name = expr_elem.get("name")
+                print(f"Evaluating variable with name {expr_name}.")
+            var_name = expr_name
 
             if var_name not in self.vars_to_vals:
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} has not been defined")
             
             result = self.vars_to_vals[var_name]
 
-        elif expr_elem.elem_type in VALUE:
+        elif expr_type in VALUE:
             if "val" not in expr_elem.dict:
                 super().error(ErrorType.NAME_ERROR, "ERROR: Value expression has no val.")
             if self.trace_output:
-                print(f'Evaluting value w val {expr_elem.dict["val"]}.')
+                print(f'Evaluting value w val {expr_elem.get("val")}.')
             result = expr_elem.get("val")  
 
-        elif expr_elem.elem_type in EXPR:
-            if expr_elem.elem_type in Operators:
+        elif expr_type in EXPR:
+            if expr_type in Operators:
                 if "op1" not in expr_elem.dict or "op2" not in expr_elem.dict:
                     super.error(ErrorType.NAME_ERROR,"Expression no valid op1 or op2.")
 
-                op1 = self.run_expression(expr_elem.dict["op1"])
-                op2 = self.run_expression(expr_elem.dict["op2"])
+                op1 = self.run_expression(expr_elem.get("op1"))
+                op2 = self.run_expression(expr_elem.get("op2"))
 
                 if self.trace_output:
-                    print(f"Evaluting operator expression {expr_elem.elem_type} {op1} {op2}.")
+                    print(f"Evaluting operator expression {expr_type} {op1} {op2}.")
 
                 if not isinstance(op1, int) or not isinstance(op2, int):
                     super().error(ErrorType.TYPE_ERROR,"Incompatible types for arithmetic operation",
                     )
 
-                result =  Operators[expr_elem.elem_type](op1, op2)
+                result =  Operators[expr_type](op1, op2)
 
-            elif expr_elem.elem_type == "fcall":
+            elif expr_type == "fcall":
                 result = self.run_fcall(expr_elem)
 
             else:
@@ -145,24 +148,26 @@ class Interpreter(InterpreterBase):
 
     def run_fcall(self, fcall_elem):
         func_list = ["print", "inputi"]
+        func_name = fcall_elem.get("name")
+        func_args = fcall_elem.get("args")
 
         if fcall_elem.elem_type != "fcall" or "name" not in fcall_elem.dict or "args" not in fcall_elem.dict:
             super().error(ErrorType.NAME_ERROR, " invalid fcall element.")
-        if fcall_elem.get("name") not in func_list:
-                super().error(ErrorType.NAME_ERROR, f"Function {fcall_elem.get('name')} not defined",)
+        if func_name not in func_list:
+                super().error(ErrorType.NAME_ERROR, f"Function {func_name} not defined",)
 
         if self.trace_output:
-            print(f'Perform function call {fcall_elem.dict["name"]}')
+            print(f'Perform function call {func_name}')
 
-        if fcall_elem.get("name") == "print":
+        if func_name == "print":
             string_print = ""
-            args = fcall_elem.get("args")
+            args = func_args
             for item in args:
                 string_print += str(self.run_expression(item))
             super().output(string_print)
 
-        elif fcall_elem.dict["name"] == "inputi":
-            args = fcall_elem.get("args")
+        elif func_name == "inputi":
+            args = func_args
             if len(args) > 1:
                 super().error(ErrorType.NAME_ERROR,f"inputi() function do not take more than parameter",)
             else:
